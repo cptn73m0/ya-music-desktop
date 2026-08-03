@@ -231,7 +231,7 @@ class Downloader:
         except ValueError as exc:
             raise RuntimeError("Неверный идентификатор плейлиста") from exc
 
-        playlist = client.users_playlists(int(kind), int(owner))
+        playlist = client.users_playlists(kind, owner)
         if not playlist:
             raise RuntimeError(f"Плейлист {playlist_id} не найден")
 

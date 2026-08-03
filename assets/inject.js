@@ -50,6 +50,10 @@
             '.' + BTN_CLASS + ':hover { transform: scale(1.08); }',
             '.' + BTN_CLASS + ':disabled { opacity: .5; cursor: default; transform: none; }',
             '.' + BTN_CLASS + '.ym-dl-loading { opacity: .7; pointer-events: none; }',
+            /* большая кнопка на странице плейлиста/альбома */
+            '.' + BTN_CLASS + '.ym-dl-page-btn {',
+            '  margin-left: 12px; padding: 8px 18px; font-size: 14px; border-radius: 10px;',
+            '}',
 
             /* скрытие рекламы */
             '.ym-dl-ad-hidden { display: none !important; visibility: hidden !important; }',
@@ -261,8 +265,10 @@
     function extractFromUrl(url) {
         if (!url) return null;
         var m;
-        m = url.match(/\/users\/(\d+)\/playlists\/(\d+)/);
-        if (m) return { type: 'playlist', id: m[1] + ':' + m[2] };
+        // Плейлист: /users/:owner/playlists/:kind
+        // kind может быть не только числом — редакционные плейлисты имеют строковый слаг
+        m = url.match(/\/users\/([^/?#]+)\/playlists\/([^/?#]+)/);
+        if (m) return { type: 'playlist', id: decodeURIComponent(m[1]) + ':' + decodeURIComponent(m[2]) };
         m = url.match(/\/track\/(\d+)/);
         if (m) return { type: 'track', id: m[1] };
         m = url.match(/\/album\/(\d+)(?!\/track\b)/);
@@ -296,7 +302,9 @@
         root.querySelectorAll('a[href*="/album/"]:not([href*="/track/"])').forEach(function (a) {
             cards.push({ anchor: a, container: a.closest('[class*="album"], [class*="entity"], li, div') || a });
         });
+        // Плейлисты — только карточки в основном контенте, т.е. НЕ элементы сайдбара
         root.querySelectorAll('a[href*="/playlists/"]').forEach(function (a) {
+            if (a.closest('nav, [class*="sidebar"], [class*="NavigationSidebar"]')) return;
             cards.push({ anchor: a, container: a.closest('[class*="playlist"], [class*="entity"], li, div') || a });
         });
         return cards;
@@ -327,8 +335,39 @@
         injectStyles();
         hideAdElements();
         findCards(document).forEach(addButton);
+        injectPageDownloadButton();
         injectSidebarButton();
         scheduleConsent();
+    }
+
+    /* ---------- большая кнопка на странице плейлиста/альбома ---------- */
+
+    function injectPageDownloadButton() {
+        if (document.getElementById('ym-page-dl-btn')) return;
+
+        var meta = extractFromUrl(location.pathname);
+        if (!meta || meta.type === 'track') return; // у трека нет страницы-карточки вида /track/N
+
+        // ищем заголовок страницы, зону с кнопками «Играть» и т.п.
+        var host = document.querySelector('[class*="page-playlist__head"], [class*="page-album__head"], [class*="page-playlist__title"]');
+        if (!host) {
+            // fallback: заголовок h1
+            var h1 = document.querySelector('h1');
+            if (h1) host = h1.parentElement;
+        }
+        if (!host) return;
+
+        var btn = document.createElement('button');
+        btn.id = 'ym-page-dl-btn';
+        btn.className = BTN_CLASS + ' ym-dl-page-btn';
+        btn.type = 'button';
+        btn.textContent = '⬇ Скачать целиком';
+        btn.title = 'Скачать ' + (meta.type === 'album' ? 'альбом' : 'плейлист') + ' целиком';
+        btn.addEventListener('click', function (e) {
+            e.preventDefault(); e.stopPropagation();
+            handleDownload(btn, meta);
+        });
+        host.appendChild(btn);
     }
 
     /* ---------- модальное окно токена ---------- */
