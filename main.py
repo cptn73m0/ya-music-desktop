@@ -19,6 +19,7 @@ from core.settings import get_settings
 
 BASE_DIR = Path(__file__).resolve().parent
 INJECT_JS = BASE_DIR / "assets" / "inject.js"
+ICON_PATH = BASE_DIR / "assets" / "icon.ico"
 APP_URL = "https://music.yandex.ru"
 # Хранилище сессии (куки, localStorage) — между запусками приложения
 WEBVIEW_DATA_DIR = Path.home() / ".ya-music-desktop" / "webview_data"
@@ -156,6 +157,7 @@ def main():
         debug=False,
         private_mode=False,               # сохраняем сессию Яндекса
         storage_path=str(WEBVIEW_DATA_DIR),
+        icon=str(ICON_PATH) if ICON_PATH.exists() else None,
     )
 
 
