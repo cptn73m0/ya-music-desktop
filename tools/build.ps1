@@ -31,7 +31,6 @@ Write-Host "==> Running PyInstaller..."
     --noconfirm `
     --add-data "assets;assets" `
     --hidden-import webview.platforms.win32 `
-    --hidden-import webview.js.api `
     --exclude-module numpy `
     --exclude-module pandas `
     --exclude-module matplotlib `
