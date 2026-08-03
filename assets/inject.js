@@ -55,9 +55,10 @@
             '.ym-dl-ad-hidden { display: none !important; visibility: hidden !important; }',
 
             /* модальное окно токена и настроек общие стили */
-            '#ym-download-overlay {',
-            '  position: fixed; inset: 0; z-index: 99999; background: rgba(0,0,0,.55);',
-            '  display: flex; align-items: center; justify-content: center;',
+            '#ym-token-overlay, #ym-settings-overlay, .ym-overlay-base {',
+            '  position: fixed !important; inset: 0 !important; z-index: 99999 !important;',
+            '  background: rgba(0,0,0,.55) !important;',
+            '  display: flex !important; align-items: center !important; justify-content: center !important;',
             '}',
             '#ym-download-modal {',
             '  width: 440px; max-width: 90vw; padding: 24px; background: #fff; color: #000;',
@@ -337,7 +338,7 @@
 
         var overlay = document.createElement('div');
         overlay.id = 'ym-token-overlay';
-        overlay.className = 'ym-download-overlay';
+        overlay.className = 'ym-overlay-base';
         overlay.innerHTML =
             '<div id="ym-download-modal">' +
             '  <h2>API-токен Яндекс Музыки</h2>' +
@@ -357,6 +358,7 @@
         var input = overlay.querySelector('#ym-token-input');
         var errorEl = overlay.querySelector('#ym-token-error');
         overlay.querySelector('#ym-token-cancel').addEventListener('click', function () { overlay.remove(); });
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
         overlay.addEventListener('keydown', function (e) { if (e.key === 'Escape') overlay.remove(); });
         input.focus();
 
@@ -385,13 +387,7 @@
 
         var overlay = document.createElement('div');
         overlay.id = 'ym-settings-overlay';
-        overlay.className = 'ym-download-overlay';
-
-        var radioHtml = '';
-        ['flat', 'artist', 'album', 'artist_album'].forEach(function (v) {
-            radioHtml += '<label class="ym-layout-option">' +
-                '<input type="radio" name="ym-layout" value="' + v + '"></label>';
-        });
+        overlay.className = 'ym-overlay-base';
 
         overlay.innerHTML =
             '<div id="ym-download-modal">' +
@@ -430,6 +426,7 @@
         });
 
         overlay.querySelector('#ym-settings-cancel').addEventListener('click', function () { overlay.remove(); });
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
         overlay.addEventListener('keydown', function (e) { if (e.key === 'Escape') overlay.remove(); });
 
         overlay.querySelector('#ym-settings-save').addEventListener('click', function () {

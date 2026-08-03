@@ -20,6 +20,8 @@ from core.settings import get_settings
 BASE_DIR = Path(__file__).resolve().parent
 INJECT_JS = BASE_DIR / "assets" / "inject.js"
 APP_URL = "https://music.yandex.ru"
+# Хранилище сессии (куки, localStorage) — между запусками приложения
+WEBVIEW_DATA_DIR = Path.home() / ".ya-music-desktop" / "webview_data"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -149,7 +151,12 @@ def main():
     # Инъекция при загрузке и при навигации внутри SPA
     window.events.loaded += lambda: _inject(window)
 
-    webview.start(debug=False)
+    WEBVIEW_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    webview.start(
+        debug=False,
+        private_mode=False,               # сохраняем сессию Яндекса
+        storage_path=str(WEBVIEW_DATA_DIR),
+    )
 
 
 if __name__ == "__main__":
