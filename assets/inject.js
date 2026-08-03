@@ -302,10 +302,14 @@
         root.querySelectorAll('a[href*="/album/"]:not([href*="/track/"])').forEach(function (a) {
             cards.push({ anchor: a, container: a.closest('[class*="album"], [class*="entity"], li, div') || a });
         });
-        // Плейлисты — только карточки в основном контенте, т.е. НЕ элементы сайдбара
+        // Плейлисты — только карточки в основном контенте, НЕ в сайдбаре
         root.querySelectorAll('a[href*="/playlists/"]').forEach(function (a) {
             if (a.closest('nav, [class*="sidebar"], [class*="NavigationSidebar"]')) return;
-            cards.push({ anchor: a, container: a.closest('[class*="playlist"], [class*="entity"], li, div') || a });
+            cards.push({
+                anchor: a,
+                // ищем внешний контейнер-карточку, иначе — сразу parentElement ссылки
+                container: a.closest('[class*="playlist"], [class*="entity-card"], [class*="entity-view"], [class*="cover"]') || a.parentElement
+            });
         });
         return cards;
     }
@@ -348,12 +352,23 @@
         var meta = extractFromUrl(location.pathname);
         if (!meta || meta.type === 'track') return; // у трека нет страницы-карточки вида /track/N
 
-        // ищем заголовок страницы, зону с кнопками «Играть» и т.п.
-        var host = document.querySelector('[class*="page-playlist__head"], [class*="page-album__head"], [class*="page-playlist__title"]');
+        // Порядок надёжности: кнопка «Слушать/Играть» -> заголовок h1 -> page-*__title -> page-*__head
+        var host = null;
+        var playBtn = document.querySelector(
+            'button[aria-label*="Слушать"], button[aria-label*="Играть"], button[aria-label*="Play"], ' +
+            'button[title*="Слушать"], button[title*="Играть"]');
+        if (playBtn) host = playBtn.parentElement;
         if (!host) {
-            // fallback: заголовок h1
             var h1 = document.querySelector('h1');
             if (h1) host = h1.parentElement;
+        }
+        if (!host) {
+            var title = document.querySelector('[class*="page-playlist__title"], [class*="page-album__title"]');
+            if (title) host = title.parentElement;
+        }
+        if (!host) {
+            var hdr = document.querySelector('[class*="page-playlist__head"], [class*="page-album__head"]');
+            if (hdr) host = hdr;
         }
         if (!host) return;
 
