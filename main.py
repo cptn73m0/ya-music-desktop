@@ -2,19 +2,20 @@
 """YaMusic Desktop Client — точка входа.
 
 Создаёт окно pywebview со страницей music.yandex.ru, внедряет
-assets/inject.js (кнопки «Скачать», окно токена) и регистрирует
-мост JS <-> Python (авторизация и скачивание).
+assets/inject.js (кнопки «Скачать», окно токена, блокировщик рекламы,
+автопринятие cookies, настройки загрузок) и регистрирует мост
+JS <-> Python (авторизация, настройки, скачивание).
 """
 import logging
 import sys
 import threading
-import time
 from pathlib import Path
 
 import webview
 
 from core import auth
 from core.downloader import Downloader
+from core.settings import get_settings
 
 BASE_DIR = Path(__file__).resolve().parent
 INJECT_JS = BASE_DIR / "assets" / "inject.js"
@@ -27,20 +28,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ya-music-desktop")
 
-# Скрываем чувствительные логи библиотек (токены в заголовках и т.п.)
+# Скрываем чувствительные/шумные логи библиотек (токены в заголовках и т.п.)
 for noisy in ("urllib3", "yandex_music", "keyring"):
     logging.getLogger(noisy).setLevel(logging.WARNING)
+
+# Ссылки на окно нужны диалогу выбора папки.
+_WINDOW = None
 
 
 class JsApi:
     """Мост между внедрённым JS и Python.
 
-    Скачивание выполняется в отдельном потоке, чтобы не блокировать UI.
+    Длительные операции выполняются в отдельном потоке, чтобы UI не зависал.
     Возвращаем JS простые dict-структуры — pywebview сериализует их в JSON.
     """
 
     def __init__(self):
-        self._downloader = Downloader(token_getter=auth.get_token)
+        self._settings = get_settings()
+        self._downloader = Downloader(token_getter=auth.get_token,
+                                      settings=self._settings)
 
     # ---- авторизация ----
 
@@ -55,18 +61,47 @@ class JsApi:
         except RuntimeError as exc:
             return {"ok": False, "error": str(exc)}
 
-        # Валидацию делаем мягко: плохой токен не блокируем,
-        # но предупреждаем пользователя.
         valid = auth.validate_token(token)
-        # Сбрасываем кэш клиента, чтобы при следующем скачивании
-        # использовался уже новый токен.
         self._downloader.reset_client()
         if not valid:
-            return {"ok": True, "warning": "Токен сохранён, но проверка не пройдена. Возможно, он неверен."}
+            return {"ok": True,
+                    "warning": "Токен сохранён, но проверка не пройдена. Возможно, он неверен."}
         return {"ok": True}
 
-    def get_token_help_url(self):
-        return auth.TOKEN_HELP_URL
+    # ---- настройки загрузок ----
+
+    def get_settings(self):
+        return self._settings.as_dict()
+
+    def save_settings(self, settings):
+        settings = settings or {}
+        try:
+            path = settings.get("download_path")
+            if path:
+                self._settings.download_path = path
+            layout = settings.get("download_layout")
+            if layout:
+                self._settings.download_layout = layout
+            self._settings.save()
+            logger.info("Настройки сохранены: путь=%s, раскладка=%s",
+                        self._settings.download_path,
+                        self._settings.download_layout)
+            return {"ok": True, "settings": self._settings.as_dict()}
+        except (ValueError, RuntimeError) as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def browse_download_path(self):
+        """Открывает нативный диалог выбора папки."""
+        start_dir = str(self._settings.download_path)
+        try:
+            picked = _WINDOW.create_file_dialog(
+                webview.FileDialog.FOLDER, directory=start_dir)
+            if picked:
+                return {"path": picked[0]}
+        except Exception as exc:
+            logger.error("Диалог выбора папки упал: %s", exc)
+            return {"error": str(exc)}
+        return {"cancelled": True}
 
     # ---- скачивание ----
 
@@ -84,13 +119,11 @@ class JsApi:
                 finished.set()
 
         threading.Thread(target=_worker, daemon=True).start()
-        # Ждём завершения pywebview-вызова, чтобы вернуть результат в JS.
         finished.wait()
         return result
 
 
 def _inject(window):
-    """Внедряет JS после загрузки страницы (и при каждом переходе SPA)."""
     try:
         code = INJECT_JS.read_text(encoding="utf-8")
     except OSError as exc:
@@ -100,13 +133,8 @@ def _inject(window):
     logger.info("Скрипт внедрён")
 
 
-def _wait_and_inject(window):
-    # Даём webview отрисоваться и подгружаем наш скрипт
-    time.sleep(1.5)
-    _inject(window)
-
-
 def main():
+    global _WINDOW
     api = JsApi()
     window = webview.create_window(
         "YaMusic Desktop Client",
@@ -116,6 +144,7 @@ def main():
         height=800,
         min_size=(900, 600),
     )
+    _WINDOW = window
 
     # Инъекция при загрузке и при навигации внутри SPA
     window.events.loaded += lambda: _inject(window)
