@@ -1,0 +1,6 @@
+pywebview>=5.0
+yandex-music>=2.2.0
+keyring>=24.0
+requests>=2.31.0
+mutagen>=1.46.0
+pyinstaller>=6.0
