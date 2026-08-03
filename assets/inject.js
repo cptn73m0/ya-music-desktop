@@ -96,12 +96,16 @@
             '.ym-dl-toast.show { opacity: 1; transform: none; }',
             '.ym-dl-toast.error { background: #b3261e; }',
 
-            /* пункт сайдбара */
-            '#ym-settings-nav-item { display:flex; align-items:center; gap:8px; padding: 10px 24px; color:#000; opacity:.7;',
-            '  cursor:pointer; font-family: "Yandex Sans", Arial, sans-serif; font-size:14px; text-decoration:none;',
-            '  border-radius: 8px; margin: 4px 12px; transition: background .15s ease, opacity .15s ease;',
+            /* пункт сайдбара — наследует тему ЯМ, добавляем только курсор */
+            '#ym-settings-nav-item, #ym-settings-nav-item * { cursor: pointer !important; }',
+            'a.ym-settings-float {',
+            '  position: fixed; left: 12px; bottom: 130px; z-index: 99997;',
+            '  display: inline-block; padding: 10px 16px; border-radius: 24px;',
+            '  background: #FFDB4D; color: #000; font-family: "Yandex Sans Text", Arial, sans-serif;',
+            '  font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer;',
+            '  box-shadow: 0 6px 20px rgba(0,0,0,.35);',
             '}',
-            '#ym-settings-nav-item:hover { opacity:1; background: rgba(255,219,77,.35); }'
+            'a.ym-settings-float:hover { transform: scale(1.05); }'
         ].join('\n');
         document.head.appendChild(style);
     }
@@ -449,46 +453,58 @@
     /* ---------- кнопка в сайдбаре ---------- */
 
     function injectSidebarButton() {
-        if (document.getElementById('ym-settings-nav-item')) return;
+        if (document.getElementById('ym-settings-nav-item') ||
+            document.getElementById('ym-settings-float')) return;
 
-        // 1) Яндекс Музыка: левый навигационный nav со ссылками "Моя волна", "Коллекция"
-        var nav = null;
-        var navs = document.querySelectorAll('nav, [class*="leftBar"], [class*="NavigationSidebar"], [class*="sidebar"]');
-        navs.forEach(function (candidate) {
-            if (nav) return;
-            if (candidate.querySelector('a[href*="/collection"], a[href*="/home"], a[href*="/my"]')) {
-                nav = candidate;
-            }
-        });
+        var links = document.querySelectorAll(
+            'a[href*="/collection"], a[href*="/home"], a[href*="/my-wave"], ' +
+            'a[href*="/radio"], a[href*="/podcasts"], a[href*="/books"]');
+        if (links.length) {
+            var ref = links[0];
+            var refHost = ref.closest('li') || ref;
+            var li = document.createElement('li');
+            li.className = refHost.className;
+            var clone = ref.cloneNode(true);
+            clone.id = 'ym-settings-nav-item';
+            clone.removeAttribute('href');
+            clone.setAttribute('role', 'button');
+            clone.setAttribute('title', 'Настройки загрузок');
+            var textNode = null;
+            (function walk(n) {
+                n.childNodes.forEach(function (c) {
+                    if (!textNode && c.nodeType === 3 && c.textContent.trim()) textNode = c;
+                    if (c.nodeType === 1 && ['svg', 'i'].indexOf(c.tagName.toLowerCase()) === -1) walk(c);
+                });
+            })(clone);
+            if (textNode) textNode.textContent = 'Настройки загрузок';
+            else clone.textContent = 'Настройки загрузок';
+            clone.addEventListener('click', function (e) {
+                e.preventDefault(); e.stopPropagation();
+                showSettingsModal();
+            });
+            li.appendChild(clone);
+            var parentEls = refHost.parentElement;
+            if (parentEls && parentEls.appendChild) parentEls.appendChild(li);
+            return;
+        }
+        // сайдбар ещё не отрендерился — плавающая кнопка
+        addFloatingButton();
+    }
 
-        var item = document.createElement('a');
-        item.id = 'ym-settings-nav-item';
-        item.href = '#';
-        item.textContent = '\u2699 Настройки загрузок';
-        item.title = 'Настройки загрузок';
-        item.addEventListener('click', function (e) {
+    // плавающая жёлтая кнопка-фолбэк, если сайдбар не найден
+    function addFloatingButton() {
+        if (document.getElementById('ym-settings-float')) return;
+        var a = document.createElement('a');
+        a.id = 'ym-settings-float';
+        a.className = 'ym-settings-float';
+        a.href = '#';
+        a.textContent = '⚙ Настройки загрузок';
+        a.title = 'Настройки загрузок';
+        a.addEventListener('click', function (e) {
             e.preventDefault(); e.stopPropagation();
             showSettingsModal();
         });
-
-        var attach = function () {
-            var list = null;
-            if (nav) {
-                list = nav.querySelector('ul');
-                if (list) { list.appendChild(item); return true; }
-                // fallback — вставим в сам nav
-                nav.appendChild(item); return true;
-            }
-            return false;
-        };
-
-        // nav может появиться позже — пробуем несколько раз
-        var tries = 0;
-        var tryAttach = function () {
-            if (attach()) return;
-            if (tries++ < 50) setTimeout(tryAttach, 300);
-        };
-        tryAttach();
+        document.body.appendChild(a);
     }
 
     function hideConsentBanner() {
