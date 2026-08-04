@@ -302,30 +302,6 @@ class Downloader:
         return {"ok": saved > 0, "saved": saved, "errors": errors,
                 "path": str(base)}
 
-        base = self._settings.download_path
-        title = _sanitize(getattr(playlist, "title", "playlist"))
-        # У плейлиста нет «своего» альбома: для flat/artist/album
-        # используем базовую логику, но плейлист складываем в подпапку,
-        # если выбрана раскладка flat — иначе треки свалятся в общую кучу.
-        if self._settings.download_layout == "flat":
-            base = base / title
-        base.mkdir(parents=True, exist_ok=True)
-
-        saved, errors = 0, []
-        for number, short in enumerate(playlist.tracks or [], start=1):
-            try:
-                track = short.track if getattr(short, "track", None) else short.fetch_track()
-                if track is None:
-                    continue
-                self._save_track(track, base, number=number)
-                saved += 1
-            except Exception as exc:
-                logger.error("Ошибка скачивания трека из плейлиста: %s", exc)
-                errors.append(str(exc))
-
-        return {"ok": saved > 0, "saved": saved, "errors": errors,
-                "path": str(base)}
-
     def download_item(self, item_id: str, item_type: str):
         """Точка входа от JS: скачать track / album / playlist."""
         item_type = (item_type or "").lower()

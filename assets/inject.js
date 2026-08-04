@@ -696,19 +696,9 @@
     }
 
     function startDownload(btn, meta) {
-        // Если это uuid-плейлист — определяем owner по кэшу или берем свой uid:
         var id = meta.id;
-        if (meta.type === 'playlist' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-            // страница уже загружена, мы можем взять owner из JS state, но чаще это ты сам
-            waitForApi().then(function (bridge) { return bridge.get_my_uid(); }).then(function (my) {
-                if (my && my.uid) {
-                    id = my.uid + ':' + id;     // uid сессии + uuid плейлиста
-                }
-                doDownload(btn, meta, id);
-            });
-        } else {
-            doDownload(btn, meta, id);
-        }
+        // uuid-плейлист: передаём как есть — Python сам резолвит через /playlist/<uuid>
+        doDownload(btn, meta, id);
     }
 
     function doDownload(btn, meta, id) {
