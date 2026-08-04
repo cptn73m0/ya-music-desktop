@@ -344,7 +344,38 @@
         scheduleConsent();
     }
 
-    /* ---------- большая кнопка на странице плейлиста/альбома ---------- */
+    /* ---------- большая кнопка плейлиста ---------- *
+     * Надёжная: вставляется рядом с кнопкой Play.
+     * MutationObserver вызывает на каждый рендер страницы.
+     */
+
+    function injectPageDownloadButton() {
+        if (document.getElementById('ym-page-dl-btn')) return;
+
+        var meta = extractFromUrl(location.pathname);
+        if (!meta || meta.type !== 'playlist') return;
+
+        // Слушаем любую кнопку «Слушать»/«Играть»
+        var playIcon = document.querySelector(
+            'button[aria-label*="Слушать"], button[title*="Слушать"], button[aria-label*="Играть"]');
+        if (!playIcon) return;
+
+        var btn = document.createElement('button');
+        btn.id = 'ym-page-dl-btn';
+        btn.className = BTN_CLASS + ' ym-dl-page-btn';
+        btn.type = 'button';
+        btn.textContent = '⬇ Скачать плейлист';
+        btn.title = 'Скачать весь плейлист (' + meta.id + ')';
+        btn.addEventListener('click', function (e) {
+            e.preventDefault(); e.stopPropagation();
+            handleDownload(btn, meta);
+        });
+        try {
+            playIcon.parentElement.insertBefore(btn, playIcon.nextSibling);
+        } catch (err) {
+            playIcon.parentElement.appendChild(btn);
+        }
+    }
 
     function injectPageDownloadButton() {
         if (document.getElementById('ym-page-dl-btn')) return;
