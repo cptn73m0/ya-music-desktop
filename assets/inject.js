@@ -135,6 +135,17 @@
         }, 5000);
     }
 
+    // визуальный лог — показывает короткое сообщение в углу экрана
+    function log(msg) {
+        console.log('[YM-DL]', msg);
+        var el = document.createElement('div');
+        el.style.cssText = 'position:fixed;top:10px;right:10px;z-index:99999;padding:6px 12px;' +
+            'background:#FFDB4D;color:#000;font-size:12px;font-weight:600;border-radius:8px;';
+        el.textContent = 'YM: ' + msg;
+        document.body.appendChild(el);
+        setTimeout(function () { el.remove(); }, 3000);
+    }
+
     /* ---------- мост pywebview ---------- */
 
     function api() {
@@ -353,12 +364,24 @@
         if (document.getElementById('ym-page-dl-btn')) return;
 
         var meta = extractFromUrl(location.pathname);
+        // Отладка: выводим путь и что распознано
+        log('Page check: ' + location.pathname + ' => ' + (meta ? meta.type + ':' + meta.id : 'null'));
         if (!meta || meta.type !== 'playlist') return;
 
         // Слушаем любую кнопку «Слушать»/«Играть»
         var playIcon = document.querySelector(
             'button[aria-label*="Слушать"], button[title*="Слушать"], button[aria-label*="Играть"]');
-        if (!playIcon) return;
+
+        // Альтернативный источник: класс с "play" (круглая кнопка-обложка плейлиста)
+        if (!playIcon) {
+            var playBtn2 = document.querySelector('[class*="play_playlist"], [class*="pagePlayButton"]');
+            if (playBtn2) playIcon = playBtn2;
+        }
+        if (!playIcon) {
+            log('No play button found yet');
+            return;
+        }
+        log('Play button found: ' + playIcon.tagName + '.' + playIcon.className.slice(0, 30));
 
         var btn = document.createElement('button');
         btn.id = 'ym-page-dl-btn';
@@ -372,8 +395,10 @@
         });
         try {
             playIcon.parentElement.insertBefore(btn, playIcon.nextSibling);
+            log('Page DL button inserted');
         } catch (err) {
             playIcon.parentElement.appendChild(btn);
+            log('Page DL button appended: ' + err);
         }
     }
 
