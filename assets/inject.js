@@ -684,11 +684,28 @@
         }, 600);
     });
 
+    /* ---------- boot ---------- */
+
+    // Маркер, подтверждающий, что инъекция работает (можно удалить после отладки)
+    function bootMarker() {
+        if (document.getElementById('ym-boot-marker')) return;
+        var el = document.createElement('div');
+        el.id = 'ym-boot-marker';
+        el.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:99999;padding:4px 10px;' +
+            'background:#222;color:#0f0;font-size:11px;border-radius:6px;opacity:.85;font-family:monospace;';
+        el.textContent = 'YM-DL active';
+        document.body.appendChild(el);
+    }
+
     function boot() {
+        bootMarker();
         injectStyles();
         installAdblock();
         scan();
         observer.observe(document.body, { childList: true, subtree: true });
+        // страховка на случай, если MutationObserver пропустил событие
+        setInterval(scan, 3000);
+        console.log('[YM-DL] script loaded, url=', location.href);
     }
 
     if (document.readyState === 'loading') {
