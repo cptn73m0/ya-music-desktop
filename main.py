@@ -164,7 +164,7 @@ def main():
 
     WEBVIEW_DATA_DIR.mkdir(parents=True, exist_ok=True)
     webview.start(
-        debug=True,                 # DevTools по F12 / правой кнопкой -> Inspect
+        debug=False,                # окончательная сборка — DevTools не нужны
         private_mode=False,               # сохраняем сессию Яндекса
         storage_path=str(WEBVIEW_DATA_DIR),
         icon=str(ICON_PATH) if ICON_PATH.exists() else None,
