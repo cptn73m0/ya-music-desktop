@@ -225,18 +225,60 @@ class Downloader:
 
     def download_playlist(self, playlist_id: str):
         """playlist_id приходит формата "<owner_uid>:<kind>" или uuid (для /playlists/<uuid>)."""
+        import yandex_music.exceptions as ym_exc
         client = self._get_client()
 
         if ":" in playlist_id:
             owner, kind = playlist_id.split(":", 1)
-            playlist = client.users_playlists(kind, owner)
+            try:
+                playlist = client.users_playlists(kind, owner)
+            except ym_exc.NotFoundError:
+                # попробуем музыкального партнёра
+                my_uid = client.account_status().account.uid
+                if str(owner) != str(my_uid):
+                    try:
+                        playlist = client.users_playlists(kind, my_uid)
+                    except ym_exc.NotFoundError:
+                        raise RuntimeError(f"Плейлист {playlist_id} не найден")
+                else:
+                    raise RuntimeError(f"Плейлист {playlist_id} не найден")
         else:
-            # uuid (/playlists/<uuid>) — пробуем с текущим uid как owner (нормально для коллекции)
-            my_uid = client.account_status().account.uid
-            playlist = client.users_playlists(playlist_id, my_uid)
+            # uuid (/playlists/<uuid>) — пробуем разных vладельцев
+            owners = ["music.partners", "yandex", client.account_status().account.uid]
+            playlist = None
+            for owner in owners:
+                try:
+                    playlist = client.users_playlists(playlist_id, owner)
+                    if playlist:
+                        break
+                except Exception:
+                    continue
+            if not playlist:
+                raise RuntimeError(f"Плейлист {playlist_id} не найден (uuid)")
 
-        if not playlist:
-            raise RuntimeError(f"Плейлист {playlist_id} не найден")
+        base = self._settings.download_path
+        title = _sanitize(getattr(playlist, "title", "playlist"))
+        # У плейлиста нет «своего» альбома: для flat/artist/album
+        # используем базовую логику, но плейлист складываем в подпапку,
+        # если выбрана раскладка flat — иначе треки свалятся в общую кучу.
+        if self._settings.download_layout == "flat":
+            base = base / title
+        base.mkdir(parents=True, exist_ok=True)
+
+        saved, errors = 0, []
+        for number, short in enumerate(playlist.tracks or [], start=1):
+            try:
+                track = short.track if getattr(short, "track", None) else short.fetch_track()
+                if track is None:
+                    continue
+                self._save_track(track, base, number=number)
+                saved += 1
+            except Exception as exc:
+                logger.error("Ошибка скачивания трека из плейлиста: %s", exc)
+                errors.append(str(exc))
+
+        return {"ok": saved > 0, "saved": saved, "errors": errors,
+                "path": str(base)}
 
         base = self._settings.download_path
         title = _sanitize(getattr(playlist, "title", "playlist"))
