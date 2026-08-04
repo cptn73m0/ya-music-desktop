@@ -100,6 +100,9 @@
             '}',
             '.ym-dl-toast.show { opacity: 1; transform: none; }',
             '.ym-dl-toast.error { background: #b3261e; }',
+            '.ym-dl-toast .ym-toast-text { font-weight: 600; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
+            '.ym-dl-toast .ym-toast-bar { height: 6px; background: rgba(255,255,255,.15); border-radius: 3px; overflow: hidden; }',
+            '.ym-dl-toast .ym-toast-bar-fill { height: 100%; width: 0%; background: #FFDB4D; transition: width .3s ease; }',
 
             /* пункт сайдбара — наследует тему ЯМ, добавляем только курсор */
             '#ym-settings-nav-item, #ym-settings-nav-item * { cursor: pointer !important; }',
@@ -135,15 +138,48 @@
         }, 5000);
     }
 
-    // визуальный лог — показывает короткое сообщение в углу экрана
-    function log(msg) {
-        console.log('[YM-DL]', msg);
-        var el = document.createElement('div');
-        el.style.cssText = 'position:fixed;top:10px;right:10px;z-index:99999;padding:6px 12px;' +
-            'background:#FFDB4D;color:#000;font-size:12px;font-weight:600;border-radius:8px;';
-        el.textContent = 'YM: ' + msg;
-        document.body.appendChild(el);
-        setTimeout(function () { el.remove(); }, 3000);
+    // визуальный прогресс-тост — не исчезает, пока не вызван finish
+    function toastSticky(id, message) {
+        var container = document.getElementById('ym-dl-toasts');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'ym-dl-toasts';
+            document.body.appendChild(container);
+        }
+        var el = document.getElementById(id);
+        if (!el) {
+            el = document.createElement('div');
+            el.id = id;
+            el.className = 'ym-dl-toast';
+            el.innerHTML = '<div class="ym-toast-text">' + message + '</div><div class="ym-toast-bar"><div class="ym-toast-bar-fill"></div></div>';
+            container.appendChild(el);
+        } else {
+            el.querySelector('.ym-toast-text').textContent = message;
+        }
+        return el;
+    }
+
+    // прогресс получает мой Python через __ymProgress()
+    window.__ymProgress = function (pct) {
+        var el = document.getElementById('ym-dl-progress-toast');
+        if (el) {
+            var bar = el.querySelector('.ym-toast-bar-fill');
+            if (bar) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+        }
+    };
+
+    function showProgress(message, total) {
+        return toastSticky('ym-dl-progress-toast', message).querySelector('.ym-toast-bar-fill');
+    }
+
+    function finishProgress(title, ok) {
+        var el = document.getElementById('ym-dl-progress-toast');
+        if (el) {
+            el.classList.add('show');
+            el.querySelector('.ym-toast-text').textContent = title;
+            var b = el.querySelector('.ym-toast-bar-fill'); if (b) b.style.backgroundColor = ok ? '#0f0' : '#f33';
+            setTimeout(function () { el.remove(); }, 8000);
+        }
     }
 
     /* ---------- мост pywebview ---------- */
@@ -706,16 +742,27 @@
         btn.textContent = '…';
         toast('Скачивание ' + (meta.type === 'track' ? 'трека'
             : meta.type === 'album' ? 'альбома' : 'плейлиста') + ' #' + id);
+
+        // Если плейлист — запускаем прогресс-тост
+        var toastId = 'ym-dl-progress-toast';
+        if (meta.type === 'playlist') {
+            showProgress('Скачиваем плейлист…');
+            window.__ymProgress(0);
+        }
+
         waitForApi().then(function (bridge) {
             return bridge.download(id, meta.type);
         }).then(function (result) {
             if (result && result.ok) {
                 toast('Готово: скачано ' + (result.saved || 1) + ' трек(ов)');
+                if (meta.type === 'playlist') finishProgress('Плейлист скачан', true);
             } else {
                 toast('Ошибка скачивания: ' + ((result && result.error) || 'неизвестно'), true);
+                if (meta.type === 'playlist') finishProgress('Ошибка скачивания', false);
             }
         }).catch(function (err) {
             toast('Ошибка: ' + err, true);
+            if (meta.type === 'playlist') finishProgress('Ошибка скачивания', false);
         }).finally(function () {
             btn.classList.remove('ym-dl-loading');
             btn.textContent = '⬇';

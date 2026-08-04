@@ -219,6 +219,18 @@ class Downloader:
 
     # ---------- публичный API ----------
 
+    def set_progress_callback(self, callback):
+        """callback(pct) — лютый JS вызов из worker-потока."""
+        self._progress_callback = callback
+
+    def _update_progress(self, current: int, total: int):
+        try:
+            if self._progress_callback and total > 0:
+                pct = int(current * 100 / total)
+                self._progress_callback(pct)
+        except Exception:
+            pass
+
     def download_track(self, track_id: str):
         client = self._get_client()
         tracks = client.tracks([track_id])
@@ -288,6 +300,7 @@ class Downloader:
         base.mkdir(parents=True, exist_ok=True)
 
         saved, errors = 0, []
+        total = len(playlist.tracks or [])
         for number, short in enumerate(playlist.tracks or [], start=1):
             try:
                 track = short.track if getattr(short, "track", None) else short.fetch_track()
@@ -298,6 +311,7 @@ class Downloader:
             except Exception as exc:
                 logger.error("Ошибка скачивания трека из плейлиста: %s", exc)
                 errors.append(str(exc))
+            self._update_progress(number, total)
 
         return {"ok": saved > 0, "saved": saved, "errors": errors,
                 "path": str(base)}
