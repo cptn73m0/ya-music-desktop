@@ -180,10 +180,42 @@ class Downloader:
         prefix = f"{number:02d} - " if number is not None else ""
         file_path = directory / f"{prefix}{artist} - {title}.mp3"
 
-        track.download(str(file_path), bitrate_in_kbps=320)
+        # Пробуем скачать с разными битрейтами (320 → 192 → 128 kbps)
+        for bitrate in (320, 192, 128):
+            try:
+                track.download(str(file_path), bitrate_in_kbps=bitrate)
+                break
+            except Exception as exc:
+                if bitrate == 128:
+                    raise RuntimeError(f"Не удалось скачать трек: {exc}") from exc
+                logger.debug("Bitrate %d недоступен для %s, пробую %d...", bitrate, title, bitrate * 64 // 100)
+                file_path = file_path.with_suffix("")  # убираем .mp3 от предыдущей неудачной попытки
         _write_tags(file_path, track, album=album)
         logger.info("Скачан трек: %s", file_path.name)
         return file_path
+
+    def _resolve_playlist_by_uuid(self, uuid: str):
+        """Получает плейлист по uuid через endpoint GET /playlist/<uuid>."""
+        import requests as req
+        token = self._token_getter()
+        if not token:
+            logger.error("Нет токена для резолва uuid")
+            return None
+        try:
+            url = f"https://api.music.yandex.net/playlist/{uuid}"
+            r = req.get(url, headers={"Authorization": f"OAuth {token}"}, timeout=15)
+            if r.status_code != 200:
+                logger.error("API вернула %d для uuid %s", r.status_code, uuid)
+                return None
+            data = r.json().get("result", {})
+            uid = data.get("uid")  # owner uid
+            kind = data.get("kind")
+            if uid is not None and kind is not None:
+                client = self._get_client()
+                return client.users_playlists(kind, uid)
+        except Exception as exc:
+            logger.error("Не удалось резолвить плейлист по uuid: %s", exc)
+        return None
 
     # ---------- публичный API ----------
 
@@ -243,18 +275,8 @@ class Downloader:
                 else:
                     raise RuntimeError(f"Плейлист {playlist_id} не найден")
         else:
-            # uuid (/playlists/<uuid>) — пробуем разных vладельцев
-            owners = ["music.partners", "yandex", client.account_status().account.uid]
-            playlist = None
-            for owner in owners:
-                try:
-                    playlist = client.users_playlists(playlist_id, owner)
-                    if playlist:
-                        break
-                except Exception:
-                    continue
-            if not playlist:
-                raise RuntimeError(f"Плейлист {playlist_id} не найден (uuid)")
+            # uuid (/playlists/<uuid>) — резолвим в owner:kind через /playlist/<uuid>
+            playlist = self._resolve_playlist_by_uuid(playlist_id)
 
         base = self._settings.download_path
         title = _sanitize(getattr(playlist, "title", "playlist"))
