@@ -118,12 +118,24 @@ class JsApi:
 
     # ---- скачивание ----
 
+    _window = None  # will be set in main()
+
+    def _progress_callback(self, pct: int):
+        """Отправляет процент прогресса в JS-тост через evaluate_js."""
+        try:
+            js = f"if (window.__ymProgress) window.__ymProgress({pct});"
+            if JsApi._window:
+                JsApi._window.evaluate_js(js)
+        except Exception:
+            pass
+
     def download(self, item_id, item_type):
         finished = threading.Event()
         result = {}
 
         def _worker():
             try:
+                self._downloader.set_progress_callback(self._progress_callback)
                 result.update(self._downloader.download_item(item_id, item_type))
             except Exception as exc:
                 logger.error("Скачивание %s:%s упало: %s", item_type, item_id, exc)
