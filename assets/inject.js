@@ -273,17 +273,64 @@
 
     /* ---------- извлечение ID ---------- */
 
+    // исправленный regex, теперь ловит и /users/…/playlists/KIND, и /playlists/UUID-style
     function extractFromUrl(url) {
         if (!url) return null;
         var m;
-        // Плейлист: /users/:owner/playlists/:kind
-        // kind может быть не только числом — редакционные плейлисты имеют строковый слаг
-        m = url.match(/\/users\/([^/?#]+)\/playlists\/([^/?#]+)/);
+
+        // 1. /users/:owner/playlists/:kind
+        m = url.match(/\/users\/([^/]+)\/playlists\/([^/?#]+)/);
         if (m) return { type: 'playlist', id: decodeURIComponent(m[1]) + ':' + decodeURIComponent(m[2]) };
+
+        // 2. /playlists/:uuid  — kind = uuid и owner тоже может быть в URL (/users/:owner/playlists/:uuid)
+        m = url.match(/\/playlists\/([A-Za-z0-9_-]{20,})/);
+        if (m) {
+            // У нас есть только uuid. Можно ли получить owner? Достанем из __INITIAL_STATE__ позже —
+            // в UI мы до этого дойдем. Собираем временный идентификатор.
+            return { type: 'playlist', id: m[1] };
+        }
+
+        // 3. /track/:trackId
         m = url.match(/\/track\/(\d+)/);
         if (m) return { type: 'track', id: m[1] };
+
+        // 4. /album/:albumId  (без /track/ дальше)
         m = url.match(/\/album\/(\d+)(?!\/track\b)/);
         if (m) return { type: 'album', id: m[1] };
+
+        return null;
+    }
+
+    // пытаемся получить однажды заполненный global state и вытащить playlist-kind/owner
+    function getPlaylistKindOwner() {
+        try {
+            var st = window.__INITIAL_STATE__ || window.__NEXT_DATA__ || {};
+            // пути могут отличаться; посмотрим несколько известных
+            var gs = st.entities && st.entities.items;
+            if (gs) {
+                var keys = Object.keys(gs);
+                for (var i = 0; i < keys.length; i++) {
+                    var val = gs[keys[i]];
+                    if (val && val.data && val.data.playlists) {
+                        var pl = val.data.playlists;
+                        if (pl.length) {
+                            var p = pl[0];
+                            if (p.kind && p.owner && p.owner.uid !== undefined) {
+                                return p.owner.uid + ':' + p.kind;
+                            }
+                        }
+                    }
+                }
+            }
+            // fallback — users_playlists
+            var up = st.users && st.users.items;
+            if (up && up[0]) {
+                var p0 = up[0].data && up[0].data.playlistsList && up[0].data.playlistsList[0];
+                if (p0 && p0.kind && p0.owner && p0.owner.uid !== undefined) {
+                    return p0.owner.uid + ':' + p0.kind;
+                }
+            }
+        } catch (e) { /* noop */ }
         return null;
     }
 
@@ -652,12 +699,24 @@
     }
 
     function startDownload(btn, meta) {
+        // если это uuid-плейлист — резолвим в owner:kind из состояния страницы
+        var id = meta.id;
+        if (meta.type === 'playlist' && (id.indexOf(':') === -1) && /^[0-9a-f-]{30,}$/i.test(id)) {
+            var resolved = getPlaylistKindOwner();
+            if (resolved) {
+                id = resolved;
+            } else {
+                toast('Не удалось определить владельца плейлиста. Обновите страницу и попробуйте снова.', true);
+                return;
+            }
+        }
+
         btn.classList.add('ym-dl-loading');
         btn.textContent = '…';
         toast('Скачивание ' + (meta.type === 'track' ? 'трека'
-            : meta.type === 'album' ? 'альбома' : 'плейлиста') + ' #' + meta.id);
+            : meta.type === 'album' ? 'альбома' : 'плейлиста') + ' #' + id);
         waitForApi().then(function (bridge) {
-            return bridge.download(meta.id, meta.type);
+            return bridge.download(id, meta.type);
         }).then(function (result) {
             if (result && result.ok) {
                 toast('Готово: скачано ' + (result.saved || 1) + ' трек(ов)');

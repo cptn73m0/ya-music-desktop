@@ -224,14 +224,17 @@ class Downloader:
                 "path": str(base)}
 
     def download_playlist(self, playlist_id: str):
-        """playlist_id приходит формата "<owner_uid>:<kind>"."""
+        """playlist_id приходит формата "<owner_uid>:<kind>" или uuid (ed. playlists)."""
         client = self._get_client()
-        try:
+        if ":" in playlist_id:
             owner, kind = playlist_id.split(":", 1)
-        except ValueError as exc:
-            raise RuntimeError("Неверный идентификатор плейлиста") from exc
-
-        playlist = client.users_playlists(kind, owner)
+            playlist = client.users_playlists(kind, owner)
+        else:
+            # uuid: пробуем с owner=None, иначе получим 404 from API itself
+            try:
+                playlist = client.users_playlists(playlist_id)
+            except Exception:
+                raise RuntimeError(f"Плейлист {playlist_id} не найден (uuid)");
         if not playlist:
             raise RuntimeError(f"Плейлист {playlist_id} не найден")
 
