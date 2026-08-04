@@ -282,13 +282,10 @@
         m = url.match(/\/users\/([^/]+)\/playlists\/([^/?#]+)/);
         if (m) return { type: 'playlist', id: decodeURIComponent(m[1]) + ':' + decodeURIComponent(m[2]) };
 
-        // 2. /playlists/:uuid  — kind = uuid и owner тоже может быть в URL (/users/:owner/playlists/:uuid)
-        m = url.match(/\/playlists\/([A-Za-z0-9_-]{20,})/);
-        if (m) {
-            // У нас есть только uuid. Можно ли получить owner? Достанем из __INITIAL_STATE__ позже —
-            // в UI мы до этого дойдем. Собираем временный идентификатор.
-            return { type: 'playlist', id: m[1] };
-        }
+        // 2. /playlists/:uuid  — uuid это и есть kind, owner предположим что = текущий юзер
+        //    В это время мы безопасно группируем. (редакционный получаем из Python API)
+        m = url.match(/\/playlists\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+        if (m) return { type: 'playlist', id: m[1], uuid: true };
 
         // 3. /track/:trackId
         m = url.match(/\/track\/(\d+)/);
@@ -699,18 +696,22 @@
     }
 
     function startDownload(btn, meta) {
-        // если это uuid-плейлист — резолвим в owner:kind из состояния страницы
+        // Если это uuid-плейлист — определяем owner по кэшу или берем свой uid:
         var id = meta.id;
-        if (meta.type === 'playlist' && (id.indexOf(':') === -1) && /^[0-9a-f-]{30,}$/i.test(id)) {
-            var resolved = getPlaylistKindOwner();
-            if (resolved) {
-                id = resolved;
-            } else {
-                toast('Не удалось определить владельца плейлиста. Обновите страницу и попробуйте снова.', true);
-                return;
-            }
+        if (meta.type === 'playlist' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+            // страница уже загружена, мы можем взять owner из JS state, но чаще это ты сам
+            waitForApi().then(function (bridge) { return bridge.get_my_uid(); }).then(function (my) {
+                if (my && my.uid) {
+                    id = my.uid + ':' + id;     // uid сессии + uuid плейлиста
+                }
+                doDownload(btn, meta, id);
+            });
+        } else {
+            doDownload(btn, meta, id);
         }
+    }
 
+    function doDownload(btn, meta, id) {
         btn.classList.add('ym-dl-loading');
         btn.textContent = '…';
         toast('Скачивание ' + (meta.type === 'track' ? 'трека'

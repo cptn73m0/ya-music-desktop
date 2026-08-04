@@ -56,6 +56,16 @@ class JsApi:
     def is_authorized(self):
         return bool(auth.is_authorized())
 
+    def get_my_uid(self):
+        """Возвращает текущий UID сессии (нужен для uuid-плейлистов)."""
+        try:
+            client = self._downloader._get_client()
+            uid = client.account_status().account.uid
+            return {"uid": uid}
+        except Exception as exc:
+            logger.warning("Не удалось получить uid: %s", exc)
+            return {"uid": None}
+
     def save_token(self, token):
         try:
             auth.save_token(token)
